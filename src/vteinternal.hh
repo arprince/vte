@@ -631,6 +631,9 @@ public:
         const char *m_hyperlink_hover_uri; /* data is owned by the ring */
         long m_hyperlink_auto_id;
 
+        /* BiDi */
+        gboolean m_bidi_rtl : 1;
+
 public:
 
         // FIXMEchpe inline!
