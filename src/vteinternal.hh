@@ -632,7 +632,8 @@ public:
         long m_hyperlink_auto_id;
 
         /* BiDi */
-        gboolean m_bidi_rtl : 1;
+        guint m_bidi_rtl  : 1;
+        guint m_bidi_auto : 1;
 
 public:
 
@@ -684,6 +685,8 @@ public:
                                bool block = false);
         void invalidate_selection();
         void invalidate_all();
+
+        void maybe_apply_bidi_attributes();
 
         void reset_update_rects();
         bool invalidate_dirty_rects_and_process_updates();

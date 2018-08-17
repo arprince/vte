@@ -2790,7 +2790,7 @@ Terminal::insert_char(gunichar c,
                                 bool invalidate_now)
 {
 	VteCellAttr attr;
-	VteRowData *row;
+	VteRowData *row, *row2;
 	long col;
 	int columns, i;
 	bool line_wrapped = false; /* cursor moved before char inserted */
@@ -2860,6 +2860,11 @@ Terminal::insert_char(gunichar c,
 			row = ensure_row();
 			row->attr.soft_wrapped = 1;
                         cursor_down(false);
+
+                        row2 = ensure_row();
+                        row2->attr.bidi_implicit = row->attr.bidi_implicit;
+                        row2->attr.bidi_rtl      = row->attr.bidi_rtl;
+                        row2->attr.bidi_auto     = row->attr.bidi_auto;
 		} else {
 			/* Don't wrap, stay at the rightmost column. */
                         col = m_screen->cursor.col =
@@ -3004,6 +3009,47 @@ not_inserted:
 			(long)m_screen->insert_delta);
 
         m_line_wrapped = line_wrapped;
+}
+
+/* Apply the BiDi parameters on the current paragraph if the cursor
+ * is at the first position of this paragraph. */
+void
+Terminal::maybe_apply_bidi_attributes()
+{
+        _vte_debug_print(VTE_DEBUG_BIDI,
+                         "Maybe applying BiDi parameters on current paragraph.\n");
+
+        if (m_screen->cursor.col != 0) {
+                _vte_debug_print(VTE_DEBUG_BIDI,
+                                 "No, cursor not in first column.\n");
+                return;
+        }
+
+        auto row = m_screen->cursor.row;
+
+        if (row > 0) {
+                const VteRowData *rowdata = _vte_ring_index (m_screen->row_data, row - 1);
+                if (rowdata != nullptr && rowdata->attr.soft_wrapped) {
+                        _vte_debug_print(VTE_DEBUG_BIDI,
+                                         "No, not after a hard wrap.\n");
+                        return;
+                }
+        }
+
+        _vte_debug_print(VTE_DEBUG_BIDI,
+                         "Yes, applying.\n");
+
+        while (TRUE) {
+                VteRowData *rowdata = _vte_ring_index_writable (m_screen->row_data, row);
+                if (rowdata == nullptr)
+                        return;
+                rowdata->attr.bidi_implicit = m_modes_ecma.BDSM();
+                rowdata->attr.bidi_rtl = m_bidi_rtl;
+                rowdata->attr.bidi_auto = m_bidi_auto;
+                if (!rowdata->attr.soft_wrapped)
+                        return;
+                row++;
+        }
 }
 
 static void
@@ -9010,6 +9056,11 @@ Terminal::draw_cells_with_attributes(struct _vte_draw_text_request *items,
 }
 
 
+/* XXX tmp hack */
+#define _vte_row_data_get_bidi(row_data_p, col) \
+    (_vte_row_data_get ((row_data_p), ((row_data_p)->attr.bidi_rtl ? (m_column_count - 1 - (col)) : (col))))
+
+
 /* Paint the contents of a given row at the given location.  Take advantage
  * of multiple-draw APIs by finding runs of characters with identical
  * attributes and bundling them together. */
@@ -9051,16 +9102,16 @@ Terminal::draw_rows(VteScreen *screen_,
 		 * making the drawing area a little wider. */
 		i = start_column;
 		if (row_data != NULL) {
-			cell = _vte_row_data_get (row_data, i);
+			cell = _vte_row_data_get_bidi (row_data, i);
 			if (cell != NULL) {
 				while (cell->attr.fragment() && i > 0) {
-					cell = _vte_row_data_get (row_data, --i);
+					cell = _vte_row_data_get_bidi (row_data, --i);
 				}
 			}
 			/* Walk the line. */
 			do {
 				/* Get the character cell's contents. */
-				cell = _vte_row_data_get (row_data, i);
+				cell = _vte_row_data_get_bidi (row_data, i);
 				/* Find the colors for this cell. */
 				selected = cell_is_selected(i, row);
                                 determine_colors(cell, selected, &fore, &back, &deco);
@@ -9069,7 +9120,7 @@ Terminal::draw_rows(VteScreen *screen_,
 
 				while (j < end_column){
 					/* Retrieve the cell. */
-					cell = _vte_row_data_get (row_data, j);
+					cell = _vte_row_data_get_bidi (row_data, j);
 					/* Don't render fragments of multicolumn characters
 					 * which have the same attributes as the initial
 					 * portions. */
@@ -9145,17 +9196,17 @@ Terminal::draw_rows(VteScreen *screen_,
 		/* Back up in case this is a multicolumn character,
 		 * making the drawing area a little wider. */
 		i = start_column;
-		cell = _vte_row_data_get (row_data, i);
+		cell = _vte_row_data_get_bidi (row_data, i);
 		if (cell == NULL) {
 			goto fg_skip_row;
 		}
 		while (cell->attr.fragment() && i > 0)
-			cell = _vte_row_data_get (row_data, --i);
+			cell = _vte_row_data_get_bidi (row_data, --i);
 
 		/* Walk the line. */
 		do {
 			/* Get the character cell's contents. */
-			cell = _vte_row_data_get (row_data, i);
+			cell = _vte_row_data_get_bidi (row_data, i);
 			if (cell == NULL) {
 				goto fg_skip_row;
 			}
@@ -9169,7 +9220,7 @@ Terminal::draw_rows(VteScreen *screen_,
 				if (++i >= end_column) {
 					goto fg_skip_row;
 				}
-				cell = _vte_row_data_get (row_data, i);
+				cell = _vte_row_data_get_bidi (row_data, i);
 				if (cell == NULL) {
 					goto fg_skip_row;
 				}
@@ -9195,7 +9246,7 @@ Terminal::draw_rows(VteScreen *screen_,
 				while (j < end_column &&
 						item_count < G_N_ELEMENTS(items)) {
 					/* Retrieve the cell. */
-					cell = _vte_row_data_get (row_data, j);
+					cell = _vte_row_data_get_bidi (row_data, j);
 					if (cell == NULL) {
 						goto fg_next_row;
 					}
@@ -9284,10 +9335,10 @@ fg_next_row:
 					 * multicolumn character, making the drawing
 					 * area a little wider. */
 					j = start_column;
-					cell = _vte_row_data_get (row_data, j);
+					cell = _vte_row_data_get_bidi (row_data, j);
 				} while (cell == NULL);
 				while (cell->attr.fragment() && j > 0) {
-					cell = _vte_row_data_get (row_data, --j);
+					cell = _vte_row_data_get_bidi (row_data, --j);
 				}
 			} while (TRUE);
 fg_draw:
@@ -10327,6 +10378,7 @@ Terminal::reset(bool clear_tabstops,
         save_cursor(&m_alternate_screen);
         /* BiDi */
         m_bidi_rtl = FALSE;
+        m_bidi_auto = FALSE;
 	/* Cause everything to be redrawn (or cleared). */
 	invalidate_all();
 
