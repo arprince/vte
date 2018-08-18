@@ -254,6 +254,10 @@ Terminal::invalidate_cells(vte::grid::column_t column_start,
 			n_columns, n_rows);
 	_vte_debug_print (VTE_DEBUG_WORK, "?");
 
+        // HACK for BiDi: Always invalidate the entire row
+        column_start = 0;
+        n_columns = m_column_count;
+
 	if (n_columns == m_column_count &&
             n_rows == m_row_count) {
 		invalidate_all();
@@ -9103,10 +9107,8 @@ Terminal::draw_rows(VteScreen *screen_,
 		i = start_column;
 		if (row_data != NULL) {
 			cell = _vte_row_data_get_bidi (row_data, i);
-			if (cell != NULL) {
-				while (cell->attr.fragment() && i > 0) {
-					cell = _vte_row_data_get_bidi (row_data, --i);
-				}
+			while (cell != NULL && cell->attr.fragment() && i > 0) {
+				cell = _vte_row_data_get_bidi (row_data, --i);
 			}
 			/* Walk the line. */
 			do {
@@ -9197,20 +9199,22 @@ Terminal::draw_rows(VteScreen *screen_,
 		 * making the drawing area a little wider. */
 		i = start_column;
 		cell = _vte_row_data_get_bidi (row_data, i);
-		if (cell == NULL) {
-			goto fg_skip_row;
-		}
-		while (cell->attr.fragment() && i > 0)
+//		if (cell == NULL) {
+//			goto fg_skip_row;
+//		}
+		while (cell != NULL && cell->attr.fragment() && i > 0)
 			cell = _vte_row_data_get_bidi (row_data, --i);
 
 		/* Walk the line. */
 		do {
 			/* Get the character cell's contents. */
 			cell = _vte_row_data_get_bidi (row_data, i);
-			if (cell == NULL) {
-				goto fg_skip_row;
-			}
-			while (cell->c == 0 || cell->attr.invisible() ||
+//			if (cell == NULL) {
+//				// goto fg_skip_row;
+//				i++;
+//				continue;
+//			}
+			while (cell == NULL || cell->c == 0 || cell->attr.invisible() ||
 					(cell->c == ' ' &&
                                          cell->attr.has_none(VTE_ATTR_UNDERLINE_MASK |
                                                              VTE_ATTR_STRIKETHROUGH_MASK |
@@ -9221,9 +9225,11 @@ Terminal::draw_rows(VteScreen *screen_,
 					goto fg_skip_row;
 				}
 				cell = _vte_row_data_get_bidi (row_data, i);
-				if (cell == NULL) {
-					goto fg_skip_row;
-				}
+//				if (cell == NULL) {
+//					// goto fg_skip_row;
+//					i++;
+//					continue;
+//				}
 			}
 			/* Find the colors for this cell. */
 			selected = cell_is_selected(i, row);
@@ -9248,7 +9254,9 @@ Terminal::draw_rows(VteScreen *screen_,
 					/* Retrieve the cell. */
 					cell = _vte_row_data_get_bidi (row_data, j);
 					if (cell == NULL) {
-						goto fg_next_row;
+						// goto fg_next_row;
+						j++;
+						continue;
 					}
                                         /* Ignore the attributes on a fragment, the attributes
                                          * of the preceding character cell should apply. */
@@ -9336,8 +9344,8 @@ fg_next_row:
 					 * area a little wider. */
 					j = start_column;
 					cell = _vte_row_data_get_bidi (row_data, j);
-				} while (cell == NULL);
-				while (cell->attr.fragment() && j > 0) {
+				} while (FALSE);  // FIXME eliminate loop
+				while (cell != NULL && cell->attr.fragment() && j > 0) {
 					cell = _vte_row_data_get_bidi (row_data, --j);
 				}
 			} while (TRUE);
