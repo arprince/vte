@@ -418,24 +418,11 @@ Terminal::find_row_data_writable(vte::grid::row_t row) const
 
 /* Find the character an the given position in the backscroll buffer. */
 // FIXMEchpe replace this with a method on VteRing
+// FIXME do we do overloading? and default parameter?
 VteCell const*
 Terminal::find_charcell(vte::grid::column_t col,
-                                  vte::grid::row_t row) const
-{
-	VteRowData const* rowdata;
-	VteCell const* ret = nullptr;
-
-	if (_vte_ring_contains(m_screen->row_data, row)) {
-		rowdata = _vte_ring_index(m_screen->row_data, row);
-		ret = _vte_row_data_get (rowdata, col);
-	}
-	return ret;
-}
-
-VteCell const*
-Terminal::find_charcell_bidi(vte::grid::column_t col,
                                   vte::grid::row_t row,
-                                  guint8 *bidi_flags) const
+                                  guint8 *bidi_flags = nullptr) const
 {
 	VteRowData const* rowdata;
 	VteCell const* ret = nullptr;
@@ -443,7 +430,8 @@ Terminal::find_charcell_bidi(vte::grid::column_t col,
 	if (_vte_ring_contains(m_screen->row_data, row)) {
 		rowdata = _vte_ring_index(m_screen->row_data, row);
 		ret = _vte_row_data_get (rowdata, col);
-		*bidi_flags = rowdata->attr.bidi_flags;
+                if (bidi_flags != nullptr)
+                        *bidi_flags = rowdata->attr.bidi_flags;
 	}
 	return ret;
 }
@@ -9083,7 +9071,7 @@ Terminal::draw_cells_with_attributes(struct _vte_draw_text_request *items,
 
 
 /* XXX tmp hack */
-#define _vte_row_data_get_bidi(row_data_p, col) \
+#define _vte_row_data_get_visual(row_data_p, col) \
     (_vte_row_data_get ((row_data_p), (((row_data_p)->attr.bidi_flags & VTE_BIDI_RTL) ? (m_column_count - 1 - (col)) : (col))))
 
 
@@ -9128,14 +9116,14 @@ Terminal::draw_rows(VteScreen *screen_,
 		 * making the drawing area a little wider. */
 		i = start_column;
 		if (row_data != NULL) {
-			cell = _vte_row_data_get_bidi (row_data, i);
+			cell = _vte_row_data_get_visual (row_data, i);
 			while (cell != NULL && cell->attr.fragment() && i > 0) {
-				cell = _vte_row_data_get_bidi (row_data, --i);
+				cell = _vte_row_data_get_visual (row_data, --i);
 			}
 			/* Walk the line. */
 			do {
 				/* Get the character cell's contents. */
-				cell = _vte_row_data_get_bidi (row_data, i);
+				cell = _vte_row_data_get_visual (row_data, i);
 				/* Find the colors for this cell. */
 				selected = cell_is_selected(i, row);
                                 determine_colors(cell, selected, &fore, &back, &deco);
@@ -9144,7 +9132,7 @@ Terminal::draw_rows(VteScreen *screen_,
 
 				while (j < end_column){
 					/* Retrieve the cell. */
-					cell = _vte_row_data_get_bidi (row_data, j);
+					cell = _vte_row_data_get_visual (row_data, j);
 					/* Don't render fragments of multicolumn characters
 					 * which have the same attributes as the initial
 					 * portions. */
@@ -9220,17 +9208,17 @@ Terminal::draw_rows(VteScreen *screen_,
 		/* Back up in case this is a multicolumn character,
 		 * making the drawing area a little wider. */
 		i = start_column;
-		cell = _vte_row_data_get_bidi (row_data, i);
+		cell = _vte_row_data_get_visual (row_data, i);
 //		if (cell == NULL) {
 //			goto fg_skip_row;
 //		}
 		while (cell != NULL && cell->attr.fragment() && i > 0)
-			cell = _vte_row_data_get_bidi (row_data, --i);
+			cell = _vte_row_data_get_visual (row_data, --i);
 
 		/* Walk the line. */
 		do {
 			/* Get the character cell's contents. */
-			cell = _vte_row_data_get_bidi (row_data, i);
+			cell = _vte_row_data_get_visual (row_data, i);
 //			if (cell == NULL) {
 //				// goto fg_skip_row;
 //				i++;
@@ -9246,7 +9234,7 @@ Terminal::draw_rows(VteScreen *screen_,
 				if (++i >= end_column) {
 					goto fg_skip_row;
 				}
-				cell = _vte_row_data_get_bidi (row_data, i);
+				cell = _vte_row_data_get_visual (row_data, i);
 //				if (cell == NULL) {
 //					// goto fg_skip_row;
 //					i++;
@@ -9276,7 +9264,7 @@ Terminal::draw_rows(VteScreen *screen_,
 				while (j < end_column &&
 						item_count < G_N_ELEMENTS(items)) {
 					/* Retrieve the cell. */
-					cell = _vte_row_data_get_bidi (row_data, j);
+					cell = _vte_row_data_get_visual (row_data, j);
 					if (cell == NULL) {
 						// goto fg_next_row;
 						j++;
@@ -9369,10 +9357,10 @@ fg_next_row:
 					 * multicolumn character, making the drawing
 					 * area a little wider. */
 					j = start_column;
-					cell = _vte_row_data_get_bidi (row_data, j);
+					cell = _vte_row_data_get_visual (row_data, j);
 				} while (FALSE);  // FIXME eliminate loop
 				while (cell != NULL && cell->attr.fragment() && j > 0) {
-					cell = _vte_row_data_get_bidi (row_data, --j);
+					cell = _vte_row_data_get_visual (row_data, --j);
 				}
 			} while (TRUE);
 fg_draw:
@@ -9516,7 +9504,7 @@ Terminal::paint_cursor()
         /* Find the first cell of the character "under" the cursor.
          * This is for CJK.  For TAB, paint the cursor where it really is. */
         guint8 bidi_flags = 0;
-	auto cell = find_charcell_bidi(col, drow, &bidi_flags);
+	auto cell = find_charcell(col, drow, &bidi_flags);
         while (cell != NULL && cell->attr.fragment() && cell->c != '\t' && col > 0) {
 		col--;
 		cell = find_charcell(col, drow);
