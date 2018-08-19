@@ -315,6 +315,7 @@ Terminal::clear_current_line()
 		/* Add enough cells to the end of the line to fill out the row. */
                 _vte_row_data_fill (rowdata, &m_fill_defaults, m_column_count);
 		rowdata->attr.soft_wrapped = 0;
+                rowdata->attr.bidi_flags = get_bidi_flags();
 		/* Repaint this row. */
 		invalidate_cells(0, m_column_count,
                                  m_screen->cursor.row, 1);
@@ -340,6 +341,7 @@ Terminal::clear_above_current()
 			/* Add new cells until we fill the row. */
                         _vte_row_data_fill (rowdata, &m_fill_defaults, m_column_count);
 			rowdata->attr.soft_wrapped = 0;
+                        rowdata->attr.bidi_flags = get_bidi_flags();
 			/* Repaint the row. */
 			invalidate_cells(0, m_column_count, i, 1);
 		}
@@ -741,6 +743,7 @@ Terminal::clear_below_current()
                         _vte_row_data_fill(rowdata, &m_fill_defaults, m_column_count);
 		}
 		rowdata->attr.soft_wrapped = 0;
+                rowdata->attr.bidi_flags = get_bidi_flags();
 		/* Repaint this row. */
 		invalidate_cells(0, m_column_count,
                                  i, 1);
