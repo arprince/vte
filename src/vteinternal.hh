@@ -122,6 +122,12 @@ enum {
         VTE_SGR_COLOR_SPEC_LEGACY = 5
 };
 
+enum {
+        VTE_BIDI_IMPLICIT = 1 << 0,
+        VTE_BIDI_RTL      = 1 << 1,
+        VTE_BIDI_AUTO     = 1 << 2,
+};
+
 struct vte_regex_and_flags {
         VteRegex *regex;
         guint32 match_flags;
@@ -689,6 +695,7 @@ public:
         void invalidate_selection();
         void invalidate_all();
 
+        guint8 get_bidi_flags();
         void maybe_apply_bidi_attributes();
 
         void reset_update_rects();
