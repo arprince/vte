@@ -9267,7 +9267,8 @@ Terminal::draw_rows(VteScreen *screen_,
 			items[0].columns = cell->attr.columns();
 			items[0].x = start_x + i * column_width;
 			items[0].y = y;
-                        items[0].mirror = ((row_data->attr.bidi_flags & (VTE_BIDI_RTL | VTE_BIDI_BOX_MIRROR)) == (VTE_BIDI_RTL | VTE_BIDI_BOX_MIRROR));  // FIXME
+			items[0].mirror = !!(row_data->attr.bidi_flags & VTE_BIDI_RTL);  // FIXME
+                        items[0].box_mirror = !!(row_data->attr.bidi_flags & VTE_BIDI_BOX_MIRROR);
 			j = i + items[0].columns;
 
 			/* Now find out how many cells have the same attributes. */
@@ -9341,7 +9342,8 @@ Terminal::draw_rows(VteScreen *screen_,
 					items[item_count].columns = cell->attr.columns();
 					items[item_count].x = start_x + j * column_width;
 					items[item_count].y = y;
-                                        items[item_count].mirror = ((row_data->attr.bidi_flags & (VTE_BIDI_RTL | VTE_BIDI_BOX_MIRROR)) == (VTE_BIDI_RTL | VTE_BIDI_BOX_MIRROR));  // FIXME
+                                        items[item_count].mirror = !!(row_data->attr.bidi_flags & VTE_BIDI_RTL);  // FIXME
+                                        items[item_count].box_mirror = !!(row_data->attr.bidi_flags & VTE_BIDI_BOX_MIRROR);
 					j +=  items[item_count].columns;
 					item_count++;
 				}
