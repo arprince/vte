@@ -419,11 +419,9 @@ Terminal::find_row_data_writable(vte::grid::row_t row) const
 
 /* Find the character an the given position in the backscroll buffer. */
 // FIXMEchpe replace this with a method on VteRing
-// FIXME do we do overloading? and default parameter?
 VteCell const*
 Terminal::find_charcell(vte::grid::column_t col,
-                                  vte::grid::row_t row,
-                                  guint8 *bidi_flags = nullptr) const
+                                  vte::grid::row_t row) const
 {
 	VteRowData const* rowdata;
 	VteCell const* ret = nullptr;
@@ -431,8 +429,6 @@ Terminal::find_charcell(vte::grid::column_t col,
 	if (_vte_ring_contains(m_screen->row_data, row)) {
 		rowdata = _vte_ring_index(m_screen->row_data, row);
 		ret = _vte_row_data_get (rowdata, col);
-                if (bidi_flags != nullptr)
-                        *bidi_flags = rowdata->attr.bidi_flags;
 	}
 	return ret;
 }
