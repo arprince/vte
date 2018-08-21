@@ -37,6 +37,7 @@
 
 #include <vte/vte.h>
 #include "vteinternal.hh"
+#include "bidi.hh"
 #include "buffer.h"
 #include "debug.h"
 #include "vtedraw.hh"
@@ -3022,7 +3023,7 @@ Terminal::get_bidi_flags()
 {
         return (m_modes_ecma.BDSM() ? VTE_BIDI_IMPLICIT : 0) |
                (m_bidi_rtl ? VTE_BIDI_RTL : 0) |
-               (m_bidi_auto ? VTE_BIDI_AUTO : 0) |
+               (m_modes_private.VTE_BIDI_AUTO() ? VTE_BIDI_AUTO : 0) |
                (m_modes_private.VTE_BOX_DRAWING_MIRROR() ? VTE_BIDI_BOX_MIRROR : 0);
 }
 
@@ -9072,7 +9073,7 @@ Terminal::draw_cells_with_attributes(struct _vte_draw_text_request *items,
 
 /* XXX tmp hack */
 #define _vte_row_data_get_visual(row_data_p, col) \
-    (_vte_row_data_get ((row_data_p), (((row_data_p)->attr.bidi_flags & VTE_BIDI_RTL) ? (m_column_count - 1 - (col)) : (col))))
+        _vte_row_data_get(row_data_p, vis2log(col))
 
 
 /* Paint the contents of a given row at the given location.  Take advantage
@@ -9116,6 +9117,7 @@ Terminal::draw_rows(VteScreen *screen_,
 		 * making the drawing area a little wider. */
 		i = start_column;
 		if (row_data != NULL) {
+                        bidi_shuffle (row_data, m_column_count);
 			cell = _vte_row_data_get_visual (row_data, i);
 			while (cell != NULL && cell->attr.fragment() && i > 0) {
 				cell = _vte_row_data_get_visual (row_data, --i);
@@ -9205,6 +9207,7 @@ Terminal::draw_rows(VteScreen *screen_,
 		if (row_data == NULL) {
 			goto fg_skip_row;
 		}
+                bidi_shuffle (row_data, m_column_count);
 		/* Back up in case this is a multicolumn character,
 		 * making the drawing area a little wider. */
 		i = start_column;
@@ -9352,6 +9355,7 @@ fg_next_row:
 						y += row_height;
 						row_data = find_row_data(row);
 					} while (row_data == NULL);
+                                        bidi_shuffle (row_data, m_column_count);
 
 					/* Back up in case this is a
 					 * multicolumn character, making the drawing
@@ -9503,8 +9507,10 @@ Terminal::paint_cursor()
 
         /* Find the first cell of the character "under" the cursor.
          * This is for CJK.  For TAB, paint the cursor where it really is. */
-        guint8 bidi_flags = 0;
-	auto cell = find_charcell(col, drow, &bidi_flags);
+        VteRowData const *row_data = find_row_data(drow);
+        bidi_shuffle (row_data, m_column_count);
+
+	auto cell = find_charcell(col, drow);
         while (cell != NULL && cell->attr.fragment() && cell->c != '\t' && col > 0) {
 		col--;
 		cell = find_charcell(col, drow);
@@ -9513,7 +9519,7 @@ Terminal::paint_cursor()
 	/* Draw the cursor. */
 	item.c = (cell && cell->c) ? cell->c : ' ';
 	item.columns = item.c == '\t' ? 1 : cell ? cell->attr.columns() : 1;
-	item.x = ((bidi_flags & VTE_BIDI_RTL) ? m_column_count - 1 - col : col) * width;
+	item.x = log2vis(col) * width;
 	item.y = row_to_pixel(drow);
 	if (cell && cell->c != 0) {
 		style = _vte_draw_get_style(cell->attr.bold(), cell->attr.italic());
@@ -10401,7 +10407,6 @@ Terminal::reset(bool clear_tabstops,
         save_cursor(&m_alternate_screen);
         /* BiDi */
         m_bidi_rtl = FALSE;
-        m_bidi_auto = FALSE;
 	/* Cause everything to be redrawn (or cleared). */
 	invalidate_all();
 
