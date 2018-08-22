@@ -9104,7 +9104,7 @@ Terminal::draw_rows(VteScreen *screen_,
 
         // FIXME find a nicer place for these
         m_ringview.set_ring (m_screen->row_data);
-        m_ringview.set_rows ((long) m_screen->scroll_delta, m_row_count + 2);
+        m_ringview.set_rows ((long) m_screen->scroll_delta, m_row_count + 3);
         m_ringview.set_width (m_column_count);
         m_ringview.update ();
 
@@ -9508,7 +9508,9 @@ Terminal::paint_cursor()
 	width = m_cell_width;
 	height = m_cell_height;
 
-        /* TODOegmont: clamp on rows? tricky... */
+        /* An outer rectangle might even peek in from a line that's completely scrolled out at the bottom. */
+        if (drow > last_displayed_row() + 1)
+                return;
 	if (CLAMP(col, 0, m_column_count - 1) != col)
 		return;
 
@@ -9517,7 +9519,7 @@ Terminal::paint_cursor()
 
         // FIXME find a nicer place for these
         m_ringview.set_ring (m_screen->row_data);
-        m_ringview.set_rows ((long) m_screen->scroll_delta, m_row_count + 2);
+        m_ringview.set_rows ((long) m_screen->scroll_delta, m_row_count + 3);
         m_ringview.set_width (m_column_count);
         m_ringview.update ();
 
