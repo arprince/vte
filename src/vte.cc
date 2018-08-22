@@ -3043,7 +3043,7 @@ Terminal::maybe_apply_bidi_attributes()
                 const VteRowData *rowdata = _vte_ring_index (m_screen->row_data, row - 1);
                 if (rowdata != nullptr && rowdata->attr.soft_wrapped) {
                         _vte_debug_print(VTE_DEBUG_BIDI,
-                                         "No, not after a hard wrap.\n");
+                                         "No, we're not after a hard wrap.\n");
                         return;
                 }
         }
@@ -9265,7 +9265,7 @@ Terminal::draw_rows(VteScreen *screen_,
 			items[0].columns = cell->attr.columns();
 			items[0].x = start_x + i * column_width;
 			items[0].y = y;
-			items[0].mirror = !!(row_data->attr.bidi_flags & VTE_BIDI_RTL);  // FIXME
+			items[0].mirror = bidimap[i].vis_rtl;
                         items[0].box_mirror = !!(row_data->attr.bidi_flags & VTE_BIDI_BOX_MIRROR);
 			j = i + items[0].columns;
 
@@ -9340,7 +9340,7 @@ Terminal::draw_rows(VteScreen *screen_,
 					items[item_count].columns = cell->attr.columns();
 					items[item_count].x = start_x + j * column_width;
 					items[item_count].y = y;
-                                        items[item_count].mirror = !!(row_data->attr.bidi_flags & VTE_BIDI_RTL);  // FIXME
+                                        items[item_count].mirror = bidimap[j].vis_rtl;
                                         items[item_count].box_mirror = !!(row_data->attr.bidi_flags & VTE_BIDI_BOX_MIRROR);
 					j +=  items[item_count].columns;
 					item_count++;
@@ -9512,10 +9512,20 @@ Terminal::paint_cursor()
 	if (CLAMP(col, 0, m_column_count - 1) != col)
 		return;
 
+
+
+
+        // FIXME find a nicer place for these
+        m_ringview.set_ring (m_screen->row_data);
+        m_ringview.set_rows ((long) m_screen->scroll_delta, m_row_count + 2);
+        m_ringview.set_width (m_column_count);
+        m_ringview.update ();
+
+
+
         /* Find the first cell of the character "under" the cursor.
          * This is for CJK.  For TAB, paint the cursor where it really is. */
         VteRowData const *row_data = find_row_data(drow);
-        m_ringview.update();
         bidicellmap const *bidimap = m_ringview.get_row_map(drow);
 
 	auto cell = find_charcell(col, drow);
