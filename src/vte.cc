@@ -8674,7 +8674,8 @@ Terminal::draw_cells(struct _vte_draw_text_request *items,
 		columns = 0;
 		x = items[i].x;
 		y = items[i].y;
-		for (; i < n && items[i].y == y; i++) {
+		/* Items are not necessarily in LTR order. Combine the ones that form an LTR run. */
+		for (; i < n && items[i].x == x + columns * column_width && items[i].y == y; i++) {
 			columns += items[i].columns;
 		}
 		if (clear && (draw_default_bg || back != VTE_DEFAULT_BG)) {
@@ -8714,7 +8715,8 @@ Terminal::draw_cells(struct _vte_draw_text_request *items,
 		do {
 			x = items[i].x;
 			y = items[i].y;
-			for (columns = 0; i < n && items[i].y == y; i++) {
+			/* Items are not necessarily in LTR order. Combine the ones that form an LTR run. */
+			for (columns = 0; i < n && items[i].x == x + columns * column_width && items[i].y == y; i++) {
 				columns += items[i].columns;
 			}
                         switch (vte_attr_get_value(attr, VTE_ATTR_UNDERLINE_VALUE_MASK, VTE_ATTR_UNDERLINE_SHIFT)) {
