@@ -9263,7 +9263,7 @@ Terminal::draw_rows(VteScreen *screen_,
 
 			items[0].c = cell->c;
 			items[0].columns = cell->attr.columns();
-			items[0].x = start_x + i * column_width;
+			items[0].x = start_x + (i - (bidimap[i].vis_rtl ? cell->attr.columns() - 1 : 0)) * column_width;
 			items[0].y = y;
 			items[0].mirror = bidimap[i].vis_rtl;
                         items[0].box_mirror = !!(row_data->attr.bidi_flags & VTE_BIDI_BOX_MIRROR);
@@ -9338,7 +9338,7 @@ Terminal::draw_rows(VteScreen *screen_,
 					/* Add this cell to the draw list. */
 					items[item_count].c = cell->c;
 					items[item_count].columns = cell->attr.columns();
-					items[item_count].x = start_x + j * column_width;
+					items[item_count].x = start_x + (j - (bidimap[j].vis_rtl ? cell->attr.columns() - 1 : 0)) * column_width;
 					items[item_count].y = y;
                                         items[item_count].mirror = bidimap[j].vis_rtl;
                                         items[item_count].box_mirror = !!(row_data->attr.bidi_flags & VTE_BIDI_BOX_MIRROR);
