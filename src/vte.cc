@@ -8674,8 +8674,7 @@ Terminal::draw_cells(struct _vte_draw_text_request *items,
 		columns = 0;
 		x = items[i].x;
 		y = items[i].y;
-		/* Items are not necessarily in LTR order. Combine the ones that form an LTR run. */
-		for (; i < n && items[i].x == x + columns * column_width && items[i].y == y; i++) {
+		for (; i < n && items[i].y == y; i++) {
 			columns += items[i].columns;
 		}
 		if (clear && (draw_default_bg || back != VTE_DEFAULT_BG)) {
@@ -8715,8 +8714,7 @@ Terminal::draw_cells(struct _vte_draw_text_request *items,
 		do {
 			x = items[i].x;
 			y = items[i].y;
-			/* Items are not necessarily in LTR order. Combine the ones that form an LTR run. */
-			for (columns = 0; i < n && items[i].x == x + columns * column_width && items[i].y == y; i++) {
+			for (columns = 0; i < n && items[i].y == y; i++) {
 				columns += items[i].columns;
 			}
                         switch (vte_attr_get_value(attr, VTE_ATTR_UNDERLINE_VALUE_MASK, VTE_ATTR_UNDERLINE_SHIFT)) {
@@ -9098,19 +9096,8 @@ Terminal::draw_rows(VteScreen *screen_,
 	guint item_count;
 	const VteCell *cell;
 	VteRowData const* row_data;
-	bidicellmap const* bidimap;
 
         uint32_t const attr_mask = m_allow_bold ? ~0 : ~VTE_ATTR_BOLD_MASK;
-
-
-
-        // FIXME find a nicer place for these
-        m_ringview.set_ring (m_screen->row_data);
-        m_ringview.set_rows ((long) m_screen->scroll_delta, m_row_count + 3);
-        m_ringview.set_width (m_column_count);
-        m_ringview.update ();
-
-
 
 	/* adjust for the absolute start of row */
 	start_x -= start_column * column_width;
@@ -9126,15 +9113,16 @@ Terminal::draw_rows(VteScreen *screen_,
 		 * making the drawing area a little wider. */
 		i = start_column;
 		if (row_data != NULL) {
-                        bidimap = m_ringview.get_row_map(row);
-			cell = _vte_row_data_get_visual (row_data, bidimap, i);
-			while (cell != NULL && cell->attr.fragment() && i > 0) {
-				cell = _vte_row_data_get_visual (row_data, bidimap, --i);
+			cell = _vte_row_data_get (row_data, i);
+			if (cell != NULL) {
+				while (cell->attr.fragment() && i > 0) {
+					cell = _vte_row_data_get (row_data, --i);
+				}
 			}
 			/* Walk the line. */
 			do {
 				/* Get the character cell's contents. */
-				cell = _vte_row_data_get_visual (row_data, bidimap, i);
+				cell = _vte_row_data_get (row_data, i);
 				/* Find the colors for this cell. */
 				selected = cell_is_selected(i, row);
                                 determine_colors(cell, selected, &fore, &back, &deco);
@@ -9143,7 +9131,7 @@ Terminal::draw_rows(VteScreen *screen_,
 
 				while (j < end_column){
 					/* Retrieve the cell. */
-					cell = _vte_row_data_get_visual (row_data, bidimap, j);
+					cell = _vte_row_data_get (row_data, j);
 					/* Don't render fragments of multicolumn characters
 					 * which have the same attributes as the initial
 					 * portions. */
@@ -9216,27 +9204,24 @@ Terminal::draw_rows(VteScreen *screen_,
 		if (row_data == NULL) {
 			goto fg_skip_row;
 		}
-		bidimap = m_ringview.get_row_map(row);
 		/* Back up in case this is a multicolumn character,
 		 * making the drawing area a little wider. */
 		i = start_column;
-		cell = _vte_row_data_get_visual (row_data, bidimap, i);
-//		if (cell == NULL) {
-//			goto fg_skip_row;
-//		}
-		while (cell != NULL && cell->attr.fragment() && i > 0)
-			cell = _vte_row_data_get_visual (row_data, bidimap, --i);
+		cell = _vte_row_data_get (row_data, i);
+		if (cell == NULL) {
+			goto fg_skip_row;
+		}
+		while (cell->attr.fragment() && i > 0)
+			cell = _vte_row_data_get (row_data, --i);
 
 		/* Walk the line. */
 		do {
 			/* Get the character cell's contents. */
-			cell = _vte_row_data_get_visual (row_data, bidimap, i);
-//			if (cell == NULL) {
-//				// goto fg_skip_row;
-//				i++;
-//				continue;
-//			}
-			while (cell == NULL || cell->c == 0 || cell->attr.invisible() ||
+			cell = _vte_row_data_get (row_data, i);
+			if (cell == NULL) {
+				goto fg_skip_row;
+			}
+			while (cell->c == 0 || cell->attr.invisible() ||
 					(cell->c == ' ' &&
                                          cell->attr.has_none(VTE_ATTR_UNDERLINE_MASK |
                                                              VTE_ATTR_STRIKETHROUGH_MASK |
@@ -9246,12 +9231,10 @@ Terminal::draw_rows(VteScreen *screen_,
 				if (++i >= end_column) {
 					goto fg_skip_row;
 				}
-				cell = _vte_row_data_get_visual (row_data, bidimap, i);
-//				if (cell == NULL) {
-//					// goto fg_skip_row;
-//					i++;
-//					continue;
-//				}
+				cell = _vte_row_data_get (row_data, i);
+				if (cell == NULL) {
+					goto fg_skip_row;
+				}
 			}
 			/* Find the colors for this cell. */
 			selected = cell_is_selected(i, row);
@@ -9265,10 +9248,8 @@ Terminal::draw_rows(VteScreen *screen_,
 
 			items[0].c = cell->c;
 			items[0].columns = cell->attr.columns();
-			items[0].x = start_x + (i - (bidimap[i].vis_rtl ? cell->attr.columns() - 1 : 0)) * column_width;
+			items[0].x = start_x + i * column_width;
 			items[0].y = y;
-			items[0].mirror = bidimap[i].vis_rtl;
-                        items[0].box_mirror = !!(row_data->attr.bidi_flags & VTE_BIDI_BOX_MIRROR);
 			j = i + items[0].columns;
 
 			/* Now find out how many cells have the same attributes. */
@@ -9276,11 +9257,9 @@ Terminal::draw_rows(VteScreen *screen_,
 				while (j < end_column &&
 						item_count < G_N_ELEMENTS(items)) {
 					/* Retrieve the cell. */
-					cell = _vte_row_data_get_visual (row_data, bidimap, j);
+					cell = _vte_row_data_get (row_data, j);
 					if (cell == NULL) {
-						// goto fg_next_row;
-						j++;
-						continue;
+						goto fg_next_row;
 					}
                                         /* Ignore the attributes on a fragment, the attributes
                                          * of the preceding character cell should apply. */
@@ -9340,10 +9319,8 @@ Terminal::draw_rows(VteScreen *screen_,
 					/* Add this cell to the draw list. */
 					items[item_count].c = cell->c;
 					items[item_count].columns = cell->attr.columns();
-					items[item_count].x = start_x + (j - (bidimap[j].vis_rtl ? cell->attr.columns() - 1 : 0)) * column_width;
+					items[item_count].x = start_x + j * column_width;
 					items[item_count].y = y;
-                                        items[item_count].mirror = bidimap[j].vis_rtl;
-                                        items[item_count].box_mirror = !!(row_data->attr.bidi_flags & VTE_BIDI_BOX_MIRROR);
 					j +=  items[item_count].columns;
 					item_count++;
 				}
@@ -9364,16 +9341,15 @@ fg_next_row:
 						y += row_height;
 						row_data = find_row_data(row);
 					} while (row_data == NULL);
-                                        bidimap = m_ringview.get_row_map(row);
 
 					/* Back up in case this is a
 					 * multicolumn character, making the drawing
 					 * area a little wider. */
 					j = start_column;
-					cell = _vte_row_data_get_visual (row_data, bidimap, j);
-				} while (FALSE);  // FIXME eliminate loop
-				while (cell != NULL && cell->attr.fragment() && j > 0) {
-					cell = _vte_row_data_get_visual (row_data, bidimap, --j);
+					cell = _vte_row_data_get (row_data, j);
+				} while (cell == NULL);
+				while (cell->attr.fragment() && j > 0) {
+					cell = _vte_row_data_get (row_data, --j);
 				}
 			} while (TRUE);
 fg_draw:
