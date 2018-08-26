@@ -9095,6 +9095,7 @@ Terminal::draw_rows(VteScreen *screen_,
         guint fore, nfore, back, nback, deco, ndeco;
         gboolean hyperlink = FALSE, nhyperlink, hilite = FALSE, nhilite;
         gboolean selected;
+        gboolean nrtl = FALSE, rtl;  /* for debugging */
         uint32_t attr = 0, nattr;
 	guint item_count;
 	const VteCell *cell;
@@ -9134,6 +9135,7 @@ Terminal::draw_rows(VteScreen *screen_,
                         /* Find the colors for this cell. */
                         selected = cell_is_selected(i, row);
                         determine_colors(cell, selected, &fore, &back, &deco);
+                        rtl = bidimap[i].vis_rtl;
 
                         while (++j < end_column) {
                                 /* Retrieve the next cell. */
@@ -9143,7 +9145,8 @@ Terminal::draw_rows(VteScreen *screen_,
                                  * in this chunk. */
                                 selected = cell_is_selected(j, row);
                                 determine_colors(cell, selected, &nfore, &nback, &ndeco);
-                                if (nback != back) {
+                                nrtl = bidimap[j].vis_rtl;
+                                if (nback != back || (_vte_debug_on (VTE_DEBUG_BIDI) && nrtl != rtl)) {
                                         break;
                                 }
                         }
@@ -9156,6 +9159,21 @@ Terminal::draw_rows(VteScreen *screen_,
                                                 y,
                                                 (j - i) * column_width,
                                                 row_height,
+                                                &bg, VTE_DRAW_OPAQUE);
+                        }
+                        if (G_UNLIKELY (_vte_debug_on (VTE_DEBUG_BIDI) && rtl)) {
+                                /* Debug: Highlight RTL letters with a slightly different background. */
+                                vte::color::rgb bg;
+                                rgb_from_index<8, 8, 8>(back, bg);
+                                bg.red   = 0xC000 + (bg.red   - 0xC000) / 2;
+                                bg.green = 0xC000 + (bg.green - 0xC000) / 2;
+                                bg.blue  = 0xC000 + (bg.blue  - 0xC000) / 2;
+                                _vte_draw_fill_rectangle (
+                                                m_draw,
+                                                x + i * column_width,
+                                                y + row_height / 8,
+                                                (j - i) * column_width,
+                                                row_height * 3 / 4,
                                                 &bg, VTE_DRAW_OPAQUE);
                         }
                         /* We'll need to continue at the first cell which didn't
