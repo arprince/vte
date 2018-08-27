@@ -9290,7 +9290,8 @@ Terminal::draw_rows(VteScreen *screen_,
                         items[item_count].y = y;
                         items[item_count].mirror = bidimap[col].vis_rtl;
                         items[item_count].box_mirror = !!(row_data->attr.bidi_flags & VTE_BIDI_BOX_MIRROR);
-                        col += items[item_count++].columns;
+                        item_count++;
+                        col++;
                 }
 
                 /* Draw the cells. */
