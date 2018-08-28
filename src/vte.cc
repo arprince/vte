@@ -255,12 +255,9 @@ Terminal::invalidate_cells(vte::grid::column_t column_start,
 			n_columns, n_rows);
 	_vte_debug_print (VTE_DEBUG_WORK, "?");
 
-        // HACK for BiDi: Always invalidate the entire row
-        column_start = 0;
-        n_columns = m_column_count;
-
-	if (n_columns == m_column_count &&
-            n_rows == m_row_count) {
+        // HACK for BiDi: Always invalidate everything.
+        // In fact we'd need to invalidate the entire implicit paragraph.
+	if (TRUE) {
 		invalidate_all();
 		return;
 	}
