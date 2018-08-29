@@ -9068,7 +9068,7 @@ Terminal::draw_cells_with_attributes(struct _vte_draw_text_request *items,
 
 /* XXX tmp hack */
 #define _vte_row_data_get_visual(row_data_p, bidimap, col) \
-        row_data_p == nullptr ? nullptr : _vte_row_data_get(row_data_p, bidimap[col].vis2log)
+        row_data_p == nullptr ? nullptr : _vte_row_data_get(row_data_p, bidimap->vis2log(col))
 
 
 /* Paint the contents of a given row at the given location.  Take advantage
@@ -9097,7 +9097,7 @@ Terminal::draw_rows(VteScreen *screen_,
 	guint item_count;
 	const VteCell *cell;
 	VteRowData const* row_data;
-        bidicellmap const* bidimap;
+        vte::base::BidiRow const* bidirow;
 
         uint32_t const attr_mask = m_allow_bold ? ~0 : ~VTE_ATTR_BOLD_MASK;
 
@@ -9121,28 +9121,28 @@ Terminal::draw_rows(VteScreen *screen_,
 	rows = end_row - start_row;
 	do {
 		row_data = find_row_data(row);
-                bidimap = m_ringview.get_row_map(row);
+                bidirow = m_ringview.get_row_map(row);
 		/* Back up in case this is a multicolumn character,
 		 * making the drawing area a little wider. */
                 i = j = start_column;
                 /* Walk the line. */
                 do {
                         /* Get the first cell's contents. */
-                        cell = row_data ? _vte_row_data_get_visual (row_data, bidimap, i) : nullptr;
+                        cell = row_data ? _vte_row_data_get_visual (row_data, bidirow, i) : nullptr;
                         /* Find the colors for this cell. */
                         selected = cell_is_selected(i, row);
                         determine_colors(cell, selected, &fore, &back, &deco);
-                        rtl = bidimap[i].vis_rtl;
+                        rtl = bidirow->vis_is_rtl(i);
 
                         while (++j < end_column) {
                                 /* Retrieve the next cell. */
-                                cell = row_data ? _vte_row_data_get_visual (row_data, bidimap, j) : nullptr;
+                                cell = row_data ? _vte_row_data_get_visual (row_data, bidirow, j) : nullptr;
                                 /* Resolve attributes to colors where possible and
                                  * compare visual attributes to the first character
                                  * in this chunk. */
                                 selected = cell_is_selected(j, row);
                                 determine_colors(cell, selected, &nfore, &nback, &ndeco);
-                                nrtl = bidimap[j].vis_rtl;
+                                nrtl = bidirow->vis_is_rtl(j);
                                 if (nback != back || (_vte_debug_on (VTE_DEBUG_BIDI) && nrtl != rtl)) {
                                         break;
                                 }
@@ -9194,7 +9194,7 @@ Terminal::draw_rows(VteScreen *screen_,
                         cell = NULL;
                         while (row < end_row) {
                                 row_data = find_row_data(row);
-                                bidimap = m_ringview.get_row_map(row);
+                                bidirow = m_ringview.get_row_map(row);
                                 if (row_data == NULL) {
                                         /* Skip row. */
                                         row++;
@@ -9204,14 +9204,14 @@ Terminal::draw_rows(VteScreen *screen_,
 
                                 /* Walk the line. */
                                 while (col < end_column) {  // FIXME gcc warning: missed loop optimization
-                                        cell = _vte_row_data_get_visual (row_data, bidimap, col);
+                                        cell = _vte_row_data_get_visual (row_data, bidirow, col);
                                         if (cell == NULL) {
                                                 col++;
                                                 continue;
                                         }
 
                                         /* Get the character cell's contents. */
-                                        cell = _vte_row_data_get_visual (row_data, bidimap, col);
+                                        cell = _vte_row_data_get_visual (row_data, bidirow, col);
                                         nhyperlink = (m_allow_hyperlink && cell->attr.hyperlink_idx != 0);
                                         if (cell->c == 0 ||
                                                 ((cell->c == ' ' || cell->c == '\t') &&  // FIXME '\t' is newly added now, double check
@@ -9283,9 +9283,9 @@ Terminal::draw_rows(VteScreen *screen_,
 
                         items[item_count].c = cell->c;
                         items[item_count].columns = cell->attr.columns();
-                        items[item_count].x = start_x + (col - (bidimap[col].vis_rtl ? cell->attr.columns() - 1 : 0)) * column_width;
+                        items[item_count].x = start_x + (col - (bidirow->vis_is_rtl(col) ? cell->attr.columns() - 1 : 0)) * column_width;
                         items[item_count].y = y;
-                        items[item_count].mirror = bidimap[col].vis_rtl;
+                        items[item_count].mirror = bidirow->vis_is_rtl(col);
                         items[item_count].box_mirror = !!(row_data->attr.bidi_flags & VTE_BIDI_BOX_MIRROR);
                         item_count++;
                         col++;
@@ -9432,6 +9432,7 @@ Terminal::paint_cursor()
         /* Find the first cell of the character "under" the cursor.
          * This is for CJK.  For TAB, paint the cursor where it really is. */
         VteRowData const *row_data = find_row_data(drow);
+        vte::base::BidiRow const *bidirow = m_ringview.get_row_map(drow);
 
 	auto cell = find_charcell(col, drow);
         while (cell != NULL && cell->attr.fragment() && cell->c != '\t' && col > 0) {
@@ -9440,12 +9441,12 @@ Terminal::paint_cursor()
 	}
 
 	/* Draw the cursor. */
-        viscol = m_ringview.log2vis(drow, col);
+        viscol = bidirow->log2vis(col);
 	item.c = (cell && cell->c) ? cell->c : ' ';
 	item.columns = item.c == '\t' ? 1 : cell ? cell->attr.columns() : 1;
-        item.x = (viscol - ((cell && m_ringview.vis_is_rtl(drow, viscol)) ? cell->attr.columns() - 1 : 0)) * width;
+        item.x = (viscol - ((cell && bidirow->vis_is_rtl(viscol)) ? cell->attr.columns() - 1 : 0)) * width;
 	item.y = row_to_pixel(drow);
-        item.mirror = m_ringview.vis_is_rtl(drow, viscol);
+        item.mirror = bidirow->vis_is_rtl(viscol);
         item.box_mirror = (row_data && (row_data->attr.bidi_flags & VTE_BIDI_BOX_MIRROR));
 	if (cell && cell->c != 0) {
 		style = _vte_draw_get_style(cell->attr.bold(), cell->attr.italic());
@@ -9473,7 +9474,7 @@ Terminal::paint_cursor()
                         stem_width = (int) (((float) (m_char_ascent + m_char_descent)) * m_cursor_aspect_ratio + 0.5);
                         stem_width = CLAMP (stem_width, VTE_LINE_WIDTH, m_cell_width);
 
-                        if (row_data && (row_data->attr.bidi_flags & VTE_BIDI_RTL))  // FIXME needs to use the autodetected paragraph direction!
+                        if (row_data && bidirow->base_is_rtl())
                                 x += m_cell_width - stem_width;
 
                         _vte_draw_fill_rectangle(m_draw,
