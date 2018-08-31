@@ -44,10 +44,10 @@ public:
         BidiRow& operator= (BidiRow const& o) = delete;
         BidiRow& operator= (BidiRow&& o) = delete;
 
-        vte::grid::column_t log2vis(vte::grid::column_t col) const;
-        vte::grid::column_t vis2log(vte::grid::column_t col) const;
-        bool log_is_rtl(vte::grid::column_t col) const;
-        bool vis_is_rtl(vte::grid::column_t col) const;
+        vte::grid::column_t log2vis(vte::grid::column_t col, int factor = 1) const;
+        vte::grid::column_t vis2log(vte::grid::column_t col, int factor = 1) const;
+        bool log_is_rtl(vte::grid::column_t col, int factor = 1) const;
+        bool vis_is_rtl(vte::grid::column_t col, int factor = 1) const;
         bool base_is_rtl() const;
         bool has_foreign() const;
 

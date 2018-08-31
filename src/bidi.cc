@@ -65,45 +65,72 @@ void BidiRow::set_width(vte::grid::column_t width)
         m_width = width;
 }
 
-/* Converts from logical to visual column. Offscreen columns are mirrored
- * for RTL lines, e.g. (assuming 80 columns) -1 <=> 80, -2 <=> 81 etc. */
-vte::grid::column_t BidiRow::log2vis(vte::grid::column_t col) const
+/* Converts from logical to visual column.
+ *
+ * The input column is assumed to be scaled up by the factor, and so will be the return value.
+ * (They can contain e.g. half cell coordinates or pixel coordinates.)
+ * The remainder is preserved or mirrored depending on the character's resolved directionality.
+ *
+ * Offscreen values are mirrored for RTL lines.
+ *
+ * Example: 80 columns, logical column 36 has RTL char mapped to visual column 42. Factor is 10.
+ * Input values 360..369 are converted to return values 429..420 respectively.
+ * If the line's base dir is RTL, offscreen values are mapped like -1 <=> 800, -2 <=> 801 etc. */
+vte::grid::column_t BidiRow::log2vis(vte::grid::column_t col, int factor) const
 {
-        if (col >= 0 && col < m_width) {
-                return m_log2vis[col];
+        if (col >= 0 && col < m_width * factor) {
+                int rem = col % factor;
+                col /= factor;
+                col = m_log2vis[col];
+                rem = m_vis_rtl[col] ? factor - 1 - rem : rem;
+                return col * factor + rem;
         } else {
-                return m_base_rtl ? m_width - 1 - col : col;
+                return m_base_rtl ? m_width * factor - 1 - col : col;
         }
 }
 
-/* Converts from visual to logical column. Offscreen columns are mirrored
- * for RTL lines, e.g. (assuming 80 columns) -1 <=> 80, -2 <=> 81 etc. */
-vte::grid::column_t BidiRow::vis2log(vte::grid::column_t col) const
+/* Converts from visual to logical column.
+ *
+ * See log2vis() for details. */
+vte::grid::column_t BidiRow::vis2log(vte::grid::column_t col, int factor) const
 {
-        if (col >= 0 && col < m_width) {
-                return m_vis2log[col];
+        if (col >= 0 && col < m_width * factor) {
+                int rem = col % factor;
+                col /= factor;
+                rem = m_vis_rtl[col] ? factor - 1 - rem : rem;
+                col = m_vis2log[col];
+                return col * factor + rem;
         } else {
-                return m_base_rtl ? m_width - 1 - col : col;
+                return m_base_rtl ? m_width * factor - 1 - col : col;
         }
 }
 
-/* Whether the cell at the given visual position has RTL directionality.
- * For offscreen columns the line's base direction is returned. */
-bool BidiRow::vis_is_rtl(vte::grid::column_t col) const
+/* Whether the cell at the given logical position has RTL resolved directionality.
+ *
+ * The input column is assumed to be scaled up by the factor. (It can contain e.g.
+ * half cell coordinate or pixel coordinate.)
+ *
+ * For offscreen columns the line's base direction is returned.
+ *
+ * (Note: the caller doing the division would be error prone at negative columns.) */
+bool BidiRow::log_is_rtl(vte::grid::column_t col, int factor) const
 {
-        if (col >= 0 && col < m_width) {
+        if (col >= 0 && col < m_width * factor) {
+                col /= factor;
+                col = m_log2vis[col];
                 return m_vis_rtl[col];
         } else {
                 return m_base_rtl;
         }
 }
 
-/* Whether the cell at the given logical position has RTL directionality.
- * For offscreen columns the line's base direction is returned. */
-bool BidiRow::log_is_rtl(vte::grid::column_t col) const
+/* Whether the cell at the given visual position has RTL resolved directionality.
+ *
+ * See log_is_rtl() for details. */
+bool BidiRow::vis_is_rtl(vte::grid::column_t col, int factor) const
 {
-        if (col >= 0 && col < m_width) {
-                col = m_log2vis[col];
+        if (col >= 0 && col < m_width * factor) {
+                col /= factor;
                 return m_vis_rtl[col];
         } else {
                 return m_base_rtl;
