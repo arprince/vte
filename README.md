@@ -1,5 +1,5 @@
 # Terminal With Better Debug Keybindings
-Press shift + PgUp and shift + pgDn to skip between the lines where commands were last entered. This is great for debugging
+Press shift + PgUp and shift + PgDn to skip between the lines where commands were last entered. This is great for debugging
 syntax errors in the terminal. No more scrolling up for days in order to find your error! Hope you like it!
 
 ### Install
