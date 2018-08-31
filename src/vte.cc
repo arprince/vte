@@ -85,6 +85,8 @@ static inline double round(double x) {
 namespace vte {
 namespace terminal {
 
+static const long NOT_FOUND = std::numeric_limits<long>::infinity();
+
 static int _vte_unichar_width(gunichar c, int utf8_ambiguous_width);
 static void stop_processing(vte::terminal::Terminal* that);
 static void add_process_timeout(vte::terminal::Terminal* that);
@@ -1940,6 +1942,82 @@ Terminal::maybe_scroll_to_bottom()
 	queue_adjustment_value_changed(m_screen->insert_delta);
 	_vte_debug_print(VTE_DEBUG_ADJ,
 			"Snapping to bottom of screen\n");
+}
+
+bool 
+Terminal::is_at_bottom_of_feed()
+{
+	/*m_screen->insert_delta is very bottom print. m_screen->scroll_delta is current location*/
+	/*unsafe comparison but it doesnt matter. Shouldnt have to worry about decimals*/
+	return m_screen->insert_delta == m_screen->scroll_delta;
+}
+
+bool
+Terminal::is_at_top_of_feed()
+{
+	/*_vte_ring_delta(m_screen->row_data) is very top print. m_screen->scroll_delta is current location*/
+	return _vte_ring_delta(m_screen->row_data) == m_screen->scroll_delta;
+}
+
+void
+Terminal::scroll_up_to_command()
+{
+	bool init_near_start = false;
+	if (m_screen->insert_delta - m_screen->scroll_delta < m_row_count)
+		init_near_start = true;
+
+	/*Regex will pick up any word at start of string with @ in middle and ending in :*/
+	/*May not pick up command lines on some obscure distros*/
+	auto regex = vte_regex_new_for_search("^.+@.+:", -1, 0, 0);
+	search_set_regex(regex, 0);
+	long distance = search_find_dist(true);
+
+	if (is_at_bottom_of_feed())
+	{
+		/*Researching prevents it from finding current line and going 1 step*/
+		distance = search_find_dist(true);
+		scroll_lines(distance);
+	}
+	/*NOT_FOUND occurs when searching at top or bottom*/
+	else if (distance == NOT_FOUND)
+		maybe_scroll_to_top();
+	else if (distance == -1)
+	{
+		/*This process prevents the hilight from traveling faster than the scroll*/
+		distance = search_find_dist(true);
+		scroll_lines(-1);
+		distance = search_find_dist(false);
+	}
+	else
+		scroll_lines(distance);
+
+	bool fin_near_start = false;
+	if (m_screen->insert_delta - m_screen->scroll_delta < m_row_count)
+		fin_near_start = true;
+
+	/*Moves the input line to top of terminal once high enough in feed*/
+	if (init_near_start && !fin_near_start)
+		scroll_lines(m_row_count - 1);
+}
+
+void
+Terminal::scroll_down_to_command()
+{
+	auto regex = vte_regex_new_for_search("^.+@.+:", -1, 0, 0);
+	search_set_regex(regex, 0);
+	long distance = search_find_dist(false);
+
+	if (is_at_top_of_feed())
+	{
+		/*Researching prevents it from finding current line and going 1 step*/
+		distance = search_find_dist(false);
+		scroll_lines(distance);
+	}
+	/*NOT_FOUND occurs when searching at top or bottom*/
+	else if (distance == NOT_FOUND)
+		maybe_scroll_to_bottom();
+	else
+		scroll_lines(distance);
 }
 
 /*
@@ -4830,6 +4908,7 @@ Terminal::widget_key_press(GdkEventKey *event)
 				suppress_meta_esc = TRUE;
 			}
 			break;
+	/*
 		case GDK_KEY_KP_Page_Up:
 		case GDK_KEY_Page_Up:
 			if (m_screen == &m_normal_screen &&
@@ -4845,6 +4924,27 @@ Terminal::widget_key_press(GdkEventKey *event)
 			if (m_screen == &m_normal_screen &&
 			    m_modifiers & GDK_SHIFT_MASK) {
 				scroll_pages(1);
+				scrolled = TRUE;
+				handled = TRUE;
+				suppress_meta_esc = TRUE;
+			}
+			break;
+	*/
+		case GDK_KEY_KP_Page_Up:
+		case GDK_KEY_Page_Up:
+			if (m_screen == &m_normal_screen &&
+			    m_modifiers & GDK_SHIFT_MASK) {
+				scroll_up_to_command();
+				scrolled = TRUE;
+				handled = TRUE;
+				suppress_meta_esc = TRUE;
+			}
+			break;
+		case GDK_KEY_KP_Page_Down:
+		case GDK_KEY_Page_Down:
+			if (m_screen == &m_normal_screen &&
+			    m_modifiers & GDK_SHIFT_MASK) {
+				scroll_down_to_command();
 				scrolled = TRUE;
 				handled = TRUE;
 				suppress_meta_esc = TRUE;
@@ -11076,6 +11176,92 @@ Terminal::search_rows(pcre2_match_context_8 *match_context,
 }
 
 bool
+Terminal::search_rows_dist(pcre2_match_context_8 *match_context,
+                                pcre2_match_data_8 *match_data,
+                                vte::grid::row_t start_row,
+                                vte::grid::row_t end_row,
+                                bool backward)
+{
+	int start, end;
+	long start_col, end_col;
+	VteCharAttributes *ca;
+	GArray *attrs;
+	gdouble value, page_size;
+
+	auto row_text = get_text(start_row, 0,
+                                 end_row, -1,
+                                 false /* block */,
+                                 true /* wrap */,
+                                 false /* include trailing whitespace */, /* FIXMEchpe maybe do include it since the match may depend on it? */
+                                 nullptr);
+
+        int (* match_fn) (const pcre2_code_8 *,
+                          PCRE2_SPTR8, PCRE2_SIZE, PCRE2_SIZE, uint32_t,
+                          pcre2_match_data_8 *, pcre2_match_context_8 *);
+        gsize *ovector, so, eo;
+        int r;
+
+        if (_vte_regex_get_jited(m_search_regex.regex))
+                match_fn = pcre2_jit_match_8;
+        else
+                match_fn = pcre2_match_8;
+
+        r = match_fn(_vte_regex_get_pcre(m_search_regex.regex),
+                     (PCRE2_SPTR8)row_text->str, row_text->len , /* subject, length */
+                     0, /* start offset */
+                     m_search_regex.match_flags |
+                     PCRE2_NO_UTF_CHECK | PCRE2_NOTEMPTY | PCRE2_PARTIAL_SOFT /* FIXME: HARD? */,
+                     match_data,
+                     match_context);
+
+        if (r == PCRE2_ERROR_NOMATCH) {
+                g_string_free (row_text, TRUE);
+                return false;
+        }
+        // FIXME: handle partial matches (PCRE2_ERROR_PARTIAL)
+        if (r < 0) {
+                g_string_free (row_text, TRUE);
+                return false;
+        }
+
+        ovector = pcre2_get_ovector_pointer_8(match_data);
+        so = ovector[0];
+        eo = ovector[1];
+        if (G_UNLIKELY(so == PCRE2_UNSET || eo == PCRE2_UNSET)) {
+                g_string_free (row_text, TRUE);
+                return false;
+        }
+
+        start = so;
+        end = eo;
+
+	/* Fetch text again, with attributes */
+	g_string_free(row_text, TRUE);
+	if (!m_search_attrs)
+		m_search_attrs = g_array_new (FALSE, TRUE, sizeof (VteCharAttributes));
+	attrs = m_search_attrs;
+	row_text = get_text(start_row, 0,
+                            end_row, -1,
+                            false /* block */,
+                            true /* wrap */,
+                            false /* include trailing whitespace */, /* FIXMEchpe maybe true? */
+                            attrs);
+
+	ca = &g_array_index (attrs, VteCharAttributes, start);
+	start_row = ca->row;
+	start_col = ca->column;
+	ca = &g_array_index (attrs, VteCharAttributes, end - 1);
+	end_row = ca->row;
+	end_col = ca->column;
+
+	g_string_free (row_text, TRUE);
+
+	select_text(start_col, start_row, end_col, end_row);
+
+	return true;
+}
+
+bool
 Terminal::search_rows_iter(pcre2_match_context_8 *match_context,
                                      pcre2_match_data_8 *match_data,
                                      vte::grid::row_t start_row,
@@ -11116,6 +11302,52 @@ Terminal::search_rows_iter(pcre2_match_context_8 *match_context,
 	}
 
 	return false;
+}
+
+long
+Terminal::search_rows_iter_dist(pcre2_match_context_8 *match_context,
+                                     pcre2_match_data_8 *match_data,
+                                     vte::grid::row_t start_row,
+                                     vte::grid::row_t end_row,
+                                     bool backward)
+{
+	const VteRowData *row;
+	long iter_start_row, iter_end_row;
+	long distance = 0;
+
+	if (backward) {
+		iter_start_row = end_row;
+		while (iter_start_row > start_row) {
+			iter_end_row = iter_start_row;
+
+			do {
+				distance--;
+				iter_start_row--;
+				row = find_row_data(iter_start_row);
+			} while (row && row->attr.soft_wrapped);
+
+			if (search_rows_dist(match_context, match_data,
+                                        iter_start_row, iter_end_row, backward))
+				return distance;
+		}
+	} else {
+		iter_end_row = start_row;
+		while (iter_end_row < end_row) {
+			iter_start_row = iter_end_row;
+
+			do {
+				distance++;
+				row = find_row_data(iter_end_row);
+				iter_end_row++;
+			} while (row && row->attr.soft_wrapped);
+
+			if (search_rows_dist(match_context, match_data,
+                                        iter_start_row, iter_end_row, backward))
+				return distance;
+		}
+	}
+
+	return NOT_FOUND;
 }
 
 bool
@@ -11189,6 +11421,81 @@ Terminal::search_find (bool backward)
         pcre2_match_context_free_8(match_context);
 
 	return match_found;
+}
+
+long
+Terminal::search_find_dist (bool backward)
+{
+        vte::grid::row_t buffer_start_row, buffer_end_row;
+        vte::grid::row_t last_start_row, last_end_row;
+        long distance = 0;
+
+        if (m_search_regex.regex == nullptr)
+                return false;
+
+	/* TODO
+	 * Currently We only find one result per extended line, and ignore columns
+	 * Moreover, the whole search thing is implemented very inefficiently.
+	 */
+
+        auto match_context = create_match_context();
+        auto match_data = pcre2_match_data_create_8(256 /* should be plenty */, nullptr /* general context */);
+
+	buffer_start_row = _vte_ring_delta (m_screen->row_data);
+	buffer_end_row = _vte_ring_next (m_screen->row_data);
+
+	if (m_has_selection) {
+		last_start_row = m_selection_start.row;
+		last_end_row = m_selection_end.row + 1;
+	} else {
+		last_start_row = m_screen->scroll_delta + m_row_count;
+		last_end_row = m_screen->scroll_delta;
+	}
+	last_start_row = MAX (buffer_start_row, last_start_row);
+	last_end_row = MIN (buffer_end_row, last_end_row);
+
+	/* If search fails, we make an empty selection at the last searched
+	 * position... */
+	if (backward) {
+		distance = search_rows_iter_dist (match_context, match_data,
+                                      buffer_start_row, last_start_row, backward);
+		if (distance != NOT_FOUND)
+			goto found;
+		distance = search_rows_iter_dist (match_context, match_data,
+                                      last_end_row, buffer_end_row, backward);
+		if (m_search_wrap_around && distance != NOT_FOUND)
+			goto found;
+		if (m_has_selection) {
+			if (m_search_wrap_around)
+			    select_empty(m_selection_start.col, m_selection_start.row);
+			else
+			    select_empty(-1, buffer_start_row - 1);
+		}
+                return NOT_FOUND;
+	} else {
+		distance = search_rows_iter_dist (match_context, match_data,
+                                      last_end_row, buffer_end_row, backward);
+		if (distance != NOT_FOUND)
+			goto found;
+		distance = search_rows_iter_dist (match_context, match_data,
+                                      buffer_start_row, last_start_row, backward);
+		if (m_search_wrap_around && distance != NOT_FOUND)
+			goto found;
+		if (m_has_selection) {
+			if (m_search_wrap_around)
+                                select_empty(m_selection_end.col + 1, m_selection_end.row);
+			else
+                                select_empty(-1, buffer_end_row);
+		}
+		return NOT_FOUND;
+	}
+
+ found:
+
+        pcre2_match_data_free_8(match_data);
+        pcre2_match_context_free_8(match_context);
+
+	return distance;
 }
 
 /*

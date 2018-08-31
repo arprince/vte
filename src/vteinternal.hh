@@ -1014,6 +1014,10 @@ public:
         void scroll_pages(long pages) { scroll_lines(pages * m_row_count); }
         void maybe_scroll_to_top();
         void maybe_scroll_to_bottom();
+        bool is_at_bottom_of_feed();
+        bool is_at_top_of_feed();
+        void scroll_up_to_command();
+        void scroll_down_to_command();
 
         void queue_cursor_moved();
         void queue_contents_changed();
@@ -1133,12 +1137,23 @@ public:
                          vte::grid::row_t start_row,
                          vte::grid::row_t end_row,
                          bool backward);
+        bool search_rows_dist(pcre2_match_context_8 *match_context,
+                         pcre2_match_data_8 *match_data,
+                         vte::grid::row_t start_row,
+                         vte::grid::row_t end_row,
+                         bool backward);
         bool search_rows_iter(pcre2_match_context_8 *match_context,
                               pcre2_match_data_8 *match_data,
                               vte::grid::row_t start_row,
                               vte::grid::row_t end_row,
                               bool backward);
+        long search_rows_iter_dist(pcre2_match_context_8 *match_context,
+                              pcre2_match_data_8 *match_data,
+                              vte::grid::row_t start_row,
+                              vte::grid::row_t end_row,
+                              bool backward);
         bool search_find(bool backward);
+        long search_find_dist(bool backward);
         bool search_set_wrap_around(bool wrap);
 
         void set_size(long columns,
