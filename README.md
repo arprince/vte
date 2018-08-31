@@ -4,6 +4,12 @@ syntax errors in the terminal. No more scrolling up for days in order to find yo
 
 ### Install
 Download files and store in folder in desired location
+Unfortunatly, you need to install dev tools to get it running, so for ubuntu:
+```
+sudo apt-get install gtk-doc-tools autoconf libtool libglib2.0.dev intltool
+libcogl-pango-dev libgtk-3-dev libpcre2-dev libgnutls28-dev
+gobject-introspection libgirepository1.0-dev valac libxml2-utils
+```
 ```
 sudo ./autogen.sh
 ```
