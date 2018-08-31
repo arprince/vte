@@ -16,6 +16,6 @@ sudo make install
 Reboot
 
 ### Logistics
-If you do not like my terminal uninstall by downloading vanilla terminal and following the above install steps in vanilla folder terminal (if something goes horribly wrong use xterm - I don't think that is a possibility though)
+If you do not like my terminal, uninstall it by downloading the vanilla vte terminal and following the above install steps in the vanilla terminal's folder (if something goes horribly wrong use xterm - I don't think that is a possibility though)
 
 Scroll up by page and scroll down by page were removed to implement this feature
