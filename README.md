@@ -3,7 +3,8 @@ Press shift + PgUp and shift + PgDn to skip between the lines where commands wer
 syntax errors in the terminal. No more scrolling up for days in order to find your error! Hope you like it!
 
 ### Install
-Download files and store in folder in desired location\n
+Download files and store in folder in desired location
+
 Unfortunatly, you need to install dev tools to get it running, so for ubuntu:
 ```
 sudo apt-get install gtk-doc-tools autoconf libtool libglib2.0.dev intltool
