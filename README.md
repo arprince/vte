@@ -3,7 +3,7 @@ Press shift + PgUp and shift + pgDn to skip between the lines where commands wer
 syntax errors in the terminal. No more scrolling up for days in order to find your error! Hope you like it!
 
 ### Install
-Download file and store folder in desired location
+Download files and store folder in desired location
 ```
 sudo ./autogen.sh
 ```
