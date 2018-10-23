@@ -1968,7 +1968,7 @@ Terminal::scroll_up_to_command()
 
 	/*Regex will pick up any word at start of string with @ in middle and ending in :*/
 	/*May not pick up command lines on some obscure distros*/
-	auto regex = vte_regex_new_for_search("^.+@.+:", -1, 0, 0);
+	auto regex = vte_regex_new_for_search("^.+@.+:.+\$", -1, 0, 0);
 	search_set_regex(regex, 0);
 	long distance = search_find_dist(true);
 
@@ -2003,7 +2003,7 @@ Terminal::scroll_up_to_command()
 void
 Terminal::scroll_down_to_command()
 {
-	auto regex = vte_regex_new_for_search("^.+@.+:", -1, 0, 0);
+	auto regex = vte_regex_new_for_search("^.+@.+:.+\$", -1, 0, 0);
 	search_set_regex(regex, 0);
 	long distance = search_find_dist(false);
 
@@ -4934,20 +4934,38 @@ Terminal::widget_key_press(GdkEventKey *event)
 		case GDK_KEY_Page_Up:
 			if (m_screen == &m_normal_screen &&
 			    m_modifiers & GDK_SHIFT_MASK) {
-				scroll_up_to_command();
-				scrolled = TRUE;
-				handled = TRUE;
-				suppress_meta_esc = TRUE;
+				if (m_screen == &m_normal_screen &&
+			    		m_modifiers & GDK_CONTROL_MASK) {
+					scroll_pages(-1);
+					scrolled = TRUE;
+					handled = TRUE;
+					suppress_meta_esc = TRUE;
+				}
+				else {
+					scroll_up_to_command();
+					scrolled = TRUE;
+					handled = TRUE;
+					suppress_meta_esc = TRUE;
+				}
 			}
 			break;
 		case GDK_KEY_KP_Page_Down:
 		case GDK_KEY_Page_Down:
 			if (m_screen == &m_normal_screen &&
 			    m_modifiers & GDK_SHIFT_MASK) {
-				scroll_down_to_command();
-				scrolled = TRUE;
-				handled = TRUE;
-				suppress_meta_esc = TRUE;
+				if (m_screen == &m_normal_screen &&
+			    		m_modifiers & GDK_CONTROL_MASK) {
+					scroll_pages(1);
+					scrolled = TRUE;
+					handled = TRUE;
+					suppress_meta_esc = TRUE;
+				}
+				else {
+					scroll_down_to_command();
+					scrolled = TRUE;
+					handled = TRUE;
+					suppress_meta_esc = TRUE;
+				}
 			}
 			break;
 		case GDK_KEY_KP_Home:
